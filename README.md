@@ -29,7 +29,7 @@ O hook **nunca bloqueia nem quebra o agente**: qualquer erro e ignorado e o proc
 ## Instalacao
 
 ```bash
-git clone <seu-repo> agentwatch && cd agentwatch
+git clone https://github.com/Subaruberu/Agente-Watch.git && cd Agente-Watch
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 pytest
@@ -265,11 +265,11 @@ agentwatch/
   api.py       # API FastAPI
   datasource.py# fonte do painel: SQLite local ou API
   seed.py      # dados sinteticos para demonstracao
+  show.py      # leitura rapida de eventos e alertas
 dashboard.py   # painel Streamlit
 Dockerfile, docker-compose.yml, docker-entrypoint.sh
 .github/workflows/ci.yml   # lint, testes e build da imagem
 deploy/azure/deploy.sh     # modelo de deploy (nao executado)
-  show.py      # leitura rapida de eventos e alertas
 log_event.py   # ponto de entrada do hook
 data/          # conjunto rotulado (e cache do juiz, ignorado pelo git)
 reports/       # relatorios de avaliacao
