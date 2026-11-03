@@ -2,7 +2,7 @@
 
 Monitor de seguranca para agentes de codigo. Registra o que o agente faz (comandos, arquivos, URLs), limpa segredos e guarda tudo em SQLite para analise.
 
-> **Status:** Fase 3 (captura + regras + juiz LLM + avaliacao). Proximas fases: API + painel, deploy no Azure.
+> **Status:** Fase 4 (captura + regras + juiz LLM + avaliacao + API + painel). Proxima fase: Docker, CI e deploy no Azure.
 
 ## Como funciona
 
@@ -10,6 +10,8 @@ Monitor de seguranca para agentes de codigo. Registra o que o agente faz (comand
 Claude Code --(hook PreToolUse, JSON no stdin)--> log_event.py --> SQLite
                                                        |-- events  (o que o agente fez)
                                                        `-- alerts  (o que as regras sinalizaram)
+                                                            |
+                                         API FastAPI <------'------> painel Streamlit
 ```
 
 A cada chamada de ferramenta, o Claude Code executa `log_event.py`, que:
@@ -116,6 +118,60 @@ Relatorio completo em `reports/rules_baseline.md`. **O juiz ainda nao foi medido
 - Varios rotulos dependem de contexto (ex.: `git push -f` em branch pessoal).
 - Antes de concluir algo, repita com eventos reais anonimizados.
 
+## API e painel (Fase 4)
+
+```bash
+pip install -r requirements-app.txt
+
+uvicorn agentwatch.api:app --host 127.0.0.1 --port 8000   # API (docs em /docs)
+streamlit run dashboard.py                                # painel
+```
+
+**Demonstracao com dados sinteticos** (sem tocar no seu banco real):
+
+```bash
+python -m agentwatch.seed --db /tmp/demo.db
+AGENTWATCH_DB=/tmp/demo.db streamlit run dashboard.py
+```
+
+### Endpoints
+
+| Metodo | Rota | O que faz |
+|---|---|---|
+| GET | `/health` | verificacao de saude (sem autenticacao) |
+| POST | `/events` | registra um evento (mesmo JSON do hook), aplica as regras e devolve os alertas |
+| GET | `/events` | lista eventos; filtros `session_id`, `tool_name`, `limit`, `offset` |
+| GET | `/alerts` | lista alertas; filtros `min_severity`, `rule_id`, `session_id` |
+| GET | `/stats` | totais, alertas por severidade e por regra, eventos por ferramenta, serie diaria |
+| GET | `/sessions` | sessoes com numero de eventos, alertas e pior severidade |
+| GET | `/sessions/{id}/timeline` | eventos da sessao em ordem, cada um com seus alertas |
+
+```bash
+curl -X POST http://127.0.0.1:8000/events -H 'Content-Type: application/json' \
+  -d '{"session_id":"s1","tool_name":"Bash","tool_input":{"command":"git push --force"}}'
+```
+
+### Seguranca da API
+
+- Por padrao a API e **aberta e pensada para localhost**: suba com `--host 127.0.0.1`.
+- Para expor em rede, defina `AGENTWATCH_API_KEY`: todas as rotas (menos `/health`) passam a exigir o cabecalho `X-API-Key`. Use HTTPS na frente (proxy/ingress), pois a chave trafega no cabecalho.
+- Segredos conhecidos sao mascarados antes de gravar, inclusive no `POST /events`, mas a limpeza e por padroes.
+- Limites: `limit` maximo de 500 por consulta; campos de texto sao truncados em 2000 caracteres.
+
+### Painel
+
+Tres abas: **Visao geral** (KPIs, alertas por severidade e por regra, eventos por ferramenta, atividade diaria), **Alertas** (tabela com filtros de severidade e regra na barra lateral) e **Sessoes** (resumo e linha do tempo de cada sessao).
+
+Por padrao le o SQLite local. Para usar a API (por exemplo, quando o painel roda em outro servidor):
+
+```bash
+export AGENTWATCH_API_URL=http://127.0.0.1:8000
+export AGENTWATCH_API_KEY=...      # so se a API exigir
+streamlit run dashboard.py
+```
+
+Os dois modos usam as mesmas consultas (`agentwatch/queries.py`) e os testes garantem que devolvem dados identicos.
+
 ## Ver eventos e alertas
 
 ```bash
@@ -142,6 +198,11 @@ agentwatch/
   scan.py      # reanalisa eventos antigos com as regras atuais
   judge.py     # juiz LLM (prompt, cache, parsing, modo hibrido)
   evaluate.py  # metricas e relatorio: regras vs. juiz
+  queries.py   # consultas de leitura (API e painel)
+  api.py       # API FastAPI
+  datasource.py# fonte do painel: SQLite local ou API
+  seed.py      # dados sinteticos para demonstracao
+dashboard.py   # painel Streamlit
   show.py      # leitura rapida de eventos e alertas
 log_event.py   # ponto de entrada do hook
 data/          # conjunto rotulado (e cache do juiz, ignorado pelo git)
@@ -155,5 +216,5 @@ examples/      # configuracao e evento de exemplo
 - [x] Fase 1: captura e armazenamento
 - [x] Fase 2: monitores por regra com testes
 - [x] Fase 3: juiz LLM e avaliacao (codigo e testes prontos; **falta medir o juiz com chave de API**)
-- [ ] Fase 4: API FastAPI e painel Streamlit
+- [x] Fase 4: API FastAPI e painel Streamlit
 - [ ] Fase 5: Docker, GitHub Actions e deploy no Azure

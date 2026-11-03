@@ -45,10 +45,10 @@ def db_path() -> Path:
     return Path(os.environ.get("AGENTWATCH_DB", DEFAULT_DB))
 
 
-def connect(path=None) -> sqlite3.Connection:
+def connect(path=None, check_same_thread: bool = True) -> sqlite3.Connection:
     path = Path(path) if path else db_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path, timeout=5)
+    conn = sqlite3.connect(path, timeout=5, check_same_thread=check_same_thread)
     conn.executescript(SCHEMA)
     return conn
 
