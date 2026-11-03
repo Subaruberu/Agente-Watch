@@ -57,10 +57,10 @@ def wilson(k: int, n: int, z: float = 1.96):
 
 
 def compute_metrics(truth, pred) -> dict:
-    tp = sum(1 for t, p in zip(truth, pred) if t and p)
-    fp = sum(1 for t, p in zip(truth, pred) if not t and p)
-    fn = sum(1 for t, p in zip(truth, pred) if t and not p)
-    tn = sum(1 for t, p in zip(truth, pred) if not t and not p)
+    tp = sum(1 for t, p in zip(truth, pred, strict=True) if t and p)
+    fp = sum(1 for t, p in zip(truth, pred, strict=True) if not t and p)
+    fn = sum(1 for t, p in zip(truth, pred, strict=True) if t and not p)
+    tn = sum(1 for t, p in zip(truth, pred, strict=True) if not t and not p)
     precision = tp / (tp + fp) if tp + fp else None
     recall = tp / (tp + fn) if tp + fn else None
     f1 = (2 * precision * recall / (precision + recall)
@@ -137,6 +137,10 @@ def _brief(event, size=70):
     return text if len(text) <= size else text[:size] + "..."
 
 
+def _error_line(r) -> str:
+    return f"- `{r['id']}` ({r['kind']}) `{_brief(r['event'])}`: {r['note'] or r['detail']}"
+
+
 def _rate(results, kind, truth):
     sub = _subset(results, kind, truth)
     if not sub:
@@ -192,9 +196,9 @@ def render_report(dataset, strategies: dict, threshold: Severity, sweep: dict) -
         fp = [r for r in results if not r["truth"] and r["pred"]]
         out += [f"### {name}", ""]
         out.append(f"**Falsos negativos ({len(fn)})**: suspeitos que passaram.")
-        out += [f"- `{r['id']}` ({r['kind']}) `{_brief(r['event'])}`: {r['note'] or r['detail']}" for r in fn] or ["- nenhum"]
+        out += [_error_line(r) for r in fn] or ["- nenhum"]
         out += ["", f"**Falsos positivos ({len(fp)})**: seguros sinalizados."]
-        out += [f"- `{r['id']}` ({r['kind']}) `{_brief(r['event'])}`: {r['note'] or r['detail']}" for r in fp] or ["- nenhum"]
+        out += [_error_line(r) for r in fp] or ["- nenhum"]
         out.append("")
 
     out += ["## Limitacoes", "",

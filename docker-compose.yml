@@ -1,0 +1,41 @@
+# API + painel. Uso:
+#   cp .env.example .env     (e troque a chave)
+#   docker compose up --build
+# API:    http://127.0.0.1:8000/docs      Painel: http://127.0.0.1:8501
+services:
+  api:
+    build: .
+    image: agentwatch:local
+    environment:
+      AGENTWATCH_SERVICE: api
+      AGENTWATCH_API_KEY: ${AGENTWATCH_API_KEY:-}
+      AGENTWATCH_SEED_ON_START: ${AGENTWATCH_SEED_ON_START:-0}
+    volumes:
+      - agentwatch-data:/data
+    ports:
+      - "127.0.0.1:8000:8000"   # so acessivel nesta maquina
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  dashboard:
+    image: agentwatch:local
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      AGENTWATCH_SERVICE: dashboard
+      AGENTWATCH_API_URL: http://api:8000
+      AGENTWATCH_API_KEY: ${AGENTWATCH_API_KEY:-}
+    ports:
+      - "127.0.0.1:8501:8501"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  agentwatch-data:

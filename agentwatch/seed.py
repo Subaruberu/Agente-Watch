@@ -31,7 +31,7 @@ def build_payloads(dataset, n=70, days=6, sessions=5, seed=7, now=None, bad_rati
     stamps = sorted(now - timedelta(seconds=rng.randint(0, days * 86400)) for _ in picked)
     per_session = max(1, len(picked) // sessions)
     payloads = []
-    for i, (row, ts) in enumerate(zip(picked, stamps)):
+    for i, (row, ts) in enumerate(zip(picked, stamps, strict=True)):
         event = row["event"]
         raw = event.get("raw_input")
         payloads.append((ts, {

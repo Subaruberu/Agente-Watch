@@ -135,8 +135,8 @@ def sensitive_file(event):
             continue
         match = _SENSITIVE_FILES.search(text) or _SENSITIVE_DIRS.search(text)
         if match:
-            return Finding("sensitive-file", Severity.HIGH,
-                           f"acesso a arquivo sensivel: {match.group(0).strip(' /\"\'=:')}")
+            found = match.group(0).strip(" /\"'=:")
+            return Finding("sensitive-file", Severity.HIGH, f"acesso a arquivo sensivel: {found}")
     return None
 
 

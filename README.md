@@ -1,8 +1,10 @@
 # AgentWatch
 
+[![CI](https://github.com/Subaruberu/agentwatch/actions/workflows/ci.yml/badge.svg)](https://github.com/Subaruberu/agentwatch/actions/workflows/ci.yml)
+
 Monitor de seguranca para agentes de codigo. Registra o que o agente faz (comandos, arquivos, URLs), limpa segredos e guarda tudo em SQLite para analise.
 
-> **Status:** Fase 4 (captura + regras + juiz LLM + avaliacao + API + painel). Proxima fase: Docker, CI e deploy no Azure.
+> **Status:** Fase 5 (captura + regras + juiz LLM + avaliacao + API + painel + Docker + CI + modelo de deploy no Azure). O juiz LLM ainda nao foi medido, e a imagem Docker e o deploy no Azure ainda nao foram executados (veja "O que foi e o que nao foi verificado").
 
 ## Como funciona
 
@@ -38,6 +40,19 @@ pytest
 Copie o conteudo de `examples/settings.example.json` para o arquivo de configuracao do Claude Code (por exemplo `~/.claude/settings.json`) e troque `/CAMINHO/ABSOLUTO` pelo caminho real deste projeto.
 
 > Confira o formato atual de hooks na documentacao oficial do Claude Code, pois ele pode mudar.
+
+### Modo remoto (opcional)
+
+Com `AGENTWATCH_API_URL` definida, o hook envia o evento a API em vez de gravar localmente:
+
+```bash
+export AGENTWATCH_API_URL=https://minha-api.exemplo.com
+export AGENTWATCH_API_KEY=...
+```
+
+- So aceita `https` (ou `http` em `localhost`): a chave de API nao deve trafegar em texto puro.
+- Segredos sao mascarados **antes** de sair da maquina, e so os campos necessarios sao enviados (sessao, ferramenta, entrada da ferramenta, diretorio). O caminho do transcript, por exemplo, nao e enviado.
+- Se a API estiver fora do ar, o evento e gravado no SQLite local: nada se perde. O tempo maximo de espera e 1,5 s (`AGENTWATCH_REMOTE_TIMEOUT`), porque o hook roda antes de cada ferramenta e nao pode atrasar o agente.
 
 ## Testar sem o agente
 
@@ -172,6 +187,54 @@ streamlit run dashboard.py
 
 Os dois modos usam as mesmas consultas (`agentwatch/queries.py`) e os testes garantem que devolvem dados identicos.
 
+## Docker, CI e deploy (Fase 5)
+
+### Docker Compose (API + painel)
+
+```bash
+cp .env.example .env           # troque AGENTWATCH_API_KEY (openssl rand -hex 24)
+docker compose up --build
+# API:    http://127.0.0.1:8000/docs
+# Painel: http://127.0.0.1:8501
+```
+
+- Uma unica imagem serve os dois servicos (`AGENTWATCH_SERVICE=api|dashboard`), roda sem privilegios e tem `HEALTHCHECK`.
+- O painel le a API pela rede do compose; as portas ficam publicadas **somente em 127.0.0.1**.
+- O banco fica no volume `agentwatch-data`.
+- `AGENTWATCH_SEED_ON_START=1` gera dados **sinteticos** na primeira subida (so para demonstracao).
+
+### Integracao continua
+
+`.github/workflows/ci.yml` roda a cada push e pull request: lint (`ruff`), testes em Python 3.11 e 3.12, o smoke test da avaliacao e, num segundo job, o **build da imagem** com um teste de saude da API (com dados sinteticos) e do painel.
+
+### Deploy de demonstracao no Azure Container Apps
+
+`deploy/azure/deploy.sh` sobe uma demo publica com **dados sinteticos**: API em ingress interno (nao fica publica), painel em ingress externo.
+
+```bash
+az login
+./deploy/azure/deploy.sh          # leia o script antes de rodar
+az group delete --name agentwatch-demo-rg --yes --no-wait   # apaga tudo depois
+```
+
+Decisoes e riscos:
+
+- **Uma replica so** (`min = max = 1`): o SQLite vive dentro da replica; com varias, cada uma teria um banco diferente.
+- Banco **efemero** com dados sinteticos, de proposito. SQLite em disco de rede (Azure Files/SMB) tem problemas de travamento de arquivo; para dados reais, o caminho certo e trocar para um banco gerenciado (PostgreSQL, por exemplo).
+- O painel Streamlit **nao tem autenticacao**. Nunca publique dados reais assim; para isso, coloque autenticacao na frente (por exemplo, a autenticacao integrada do Container Apps).
+- Recursos na nuvem **podem gerar custo**.
+
+### O que foi e o que nao foi verificado
+
+| Item | Situacao |
+|---|---|
+| Testes automatizados (124) e lint | executados e passando |
+| Entrypoint (`api`, `dashboard`, semeadura, erro de servico) | executado localmente, sem Docker |
+| Sintaxe do compose, do workflow e do `deploy.sh` | validada |
+| `docker build` / `docker compose up` | **nao executado** (sem Docker no ambiente de desenvolvimento); o job `docker` do CI e o primeiro teste real |
+| `deploy.sh` no Azure | **nao executado**; e um modelo, confira cada comando com `az containerapp --help` |
+| Juiz LLM contra a API real | **nao medido** (falta chave de API) |
+
 ## Ver eventos e alertas
 
 ```bash
@@ -184,7 +247,7 @@ O banco fica em `~/.agentwatch/events.db` (ou no caminho de `AGENTWATCH_DB`).
 
 ## Privacidade
 
-- Segredos conhecidos sao mascarados, mas a limpeza e por padroes e **nao e perfeita**.
+- Segredos conhecidos sao mascarados (padroes no texto e valores de chaves como `password`, `token`, `api_key`), mas a limpeza e por padroes e **nao e perfeita**.
 - Nao publique bancos reais. `*.db` ja esta no `.gitignore`.
 - Para demos publicas, use eventos sinteticos como `examples/sample_event.json`.
 
@@ -203,6 +266,9 @@ agentwatch/
   datasource.py# fonte do painel: SQLite local ou API
   seed.py      # dados sinteticos para demonstracao
 dashboard.py   # painel Streamlit
+Dockerfile, docker-compose.yml, docker-entrypoint.sh
+.github/workflows/ci.yml   # lint, testes e build da imagem
+deploy/azure/deploy.sh     # modelo de deploy (nao executado)
   show.py      # leitura rapida de eventos e alertas
 log_event.py   # ponto de entrada do hook
 data/          # conjunto rotulado (e cache do juiz, ignorado pelo git)
@@ -217,4 +283,4 @@ examples/      # configuracao e evento de exemplo
 - [x] Fase 2: monitores por regra com testes
 - [x] Fase 3: juiz LLM e avaliacao (codigo e testes prontos; **falta medir o juiz com chave de API**)
 - [x] Fase 4: API FastAPI e painel Streamlit
-- [ ] Fase 5: Docker, GitHub Actions e deploy no Azure
+- [x] Fase 5: Docker, GitHub Actions e modelo de deploy no Azure (falta executar o build e o deploy)

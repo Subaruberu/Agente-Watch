@@ -1,0 +1,13 @@
+.git
+.github
+.venv
+__pycache__
+.pytest_cache
+.ruff_cache
+*.db
+.env
+tests
+reports
+deploy
+data/judge_cache.jsonl
+*.zip

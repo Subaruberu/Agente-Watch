@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from agentwatch.judge import (
-    Judge, JudgeConfigError, Verdict, hybrid_verdict, parse_verdict, render_event,
+    Judge, JudgeConfigError, hybrid_verdict, parse_verdict, render_event,
 )
 
 
