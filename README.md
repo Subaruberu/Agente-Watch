@@ -1,6 +1,6 @@
 # AgentWatch
 
-[![CI](https://github.com/Subaruberu/agentwatch/actions/workflows/ci.yml/badge.svg)](https://github.com/Subaruberu/agentwatch/actions/workflows/ci.yml)
+[![CI](https://github.com/Subaruberu/Agente-Watch/actions/workflows/ci.yml/badge.svg)](https://github.com/Subaruberu/Agente-Watch/actions/workflows/ci.yml)
 
 Monitor de seguranca para agentes de codigo. Registra o que o agente faz (comandos, arquivos, URLs), limpa segredos e guarda tudo em SQLite para analise.
 
