@@ -26,4 +26,4 @@ EXPOSE 8000 8501
 HEALTHCHECK --interval=15s --timeout=4s --start-period=20s --retries=3 \
     CMD python -c "import os, urllib.request as u; p = '8000/health' if os.environ.get('AGENTWATCH_SERVICE', 'api') == 'api' else '8501/_stcore/health'; u.urlopen('http://127.0.0.1:' + p, timeout=3)"
 
-ENTRYPOINT ["./docker-entrypoint.sh"]
+ENTRYPOINT ["sh", "/app/docker-entrypoint.sh"]
