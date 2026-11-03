@@ -20,6 +20,18 @@ CREATE TABLE IF NOT EXISTS events (
 );
 CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id);
 CREATE INDEX IF NOT EXISTS idx_events_tool    ON events(tool_name);
+
+CREATE TABLE IF NOT EXISTS alerts (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id      INTEGER NOT NULL REFERENCES events(id),
+    ts            TEXT NOT NULL,
+    rule_id       TEXT NOT NULL,
+    severity      INTEGER NOT NULL,
+    severity_name TEXT NOT NULL,
+    message       TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_alerts_event ON alerts(event_id);
+CREATE INDEX IF NOT EXISTS idx_alerts_rule  ON alerts(rule_id);
 """
 
 COLUMNS = (
@@ -41,11 +53,23 @@ def connect(path=None) -> sqlite3.Connection:
     return conn
 
 
-def insert_event(conn: sqlite3.Connection, event: dict) -> None:
+def insert_event(conn: sqlite3.Connection, event: dict) -> int:
+    """Grava um evento e devolve o id gerado."""
     values = [event.get(col) for col in COLUMNS]
     placeholders = ", ".join("?" for _ in COLUMNS)
-    conn.execute(
+    cur = conn.execute(
         f"INSERT INTO events ({', '.join(COLUMNS)}) VALUES ({placeholders})",
         values,
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def insert_alert(conn: sqlite3.Connection, event_id: int, ts: str,
+                 rule_id: str, severity: int, severity_name: str, message: str) -> None:
+    conn.execute(
+        "INSERT INTO alerts (event_id, ts, rule_id, severity, severity_name, message) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (event_id, ts, rule_id, severity, severity_name, message),
     )
     conn.commit()

@@ -8,7 +8,8 @@ import re
 import sys
 from datetime import datetime, timezone
 
-from .db import connect, insert_event
+from .db import connect, insert_alert, insert_event
+from .monitors import analyze
 
 MAX_LEN = 2000
 
@@ -67,7 +68,10 @@ def main() -> int:
         event = parse_event(payload)
         conn = connect()
         try:
-            insert_event(conn, event)
+            event_id = insert_event(conn, event)
+            for f in analyze(event):
+                insert_alert(conn, event_id, event["ts"], f.rule_id,
+                             int(f.severity), f.severity.name, f.message)
         finally:
             conn.close()
     except Exception as exc:  # noqa: BLE001 - o hook nunca deve falhar
