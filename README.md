@@ -2,7 +2,7 @@
 
 Monitor de seguranca para agentes de codigo. Registra o que o agente faz (comandos, arquivos, URLs), limpa segredos e guarda tudo em SQLite para analise.
 
-> **Status:** Fase 2 (captura + regras de deteccao). Proximas fases: avaliacao com LLM, API + painel, deploy no Azure.
+> **Status:** Fase 3 (captura + regras + juiz LLM + avaliacao). Proximas fases: API + painel, deploy no Azure.
 
 ## Como funciona
 
@@ -65,6 +65,57 @@ Dominios confiaveis extras: `AGENTWATCH_ALLOWED_DOMAINS=meudominio.com,outro.org
 - `curl` com URL sem `http://` ou `https://` nao e analisado.
 - Medir esses erros e o objetivo da Fase 3.
 
+## Juiz LLM e avaliacao (Fase 3)
+
+As regras erram: deixam passar comandos ofuscados e disparam em casos inocentes. O **juiz** pede a um modelo Claude que classifique cada evento como `safe` ou `suspicious`, e o modulo de **avaliacao** mede quanto cada abordagem acerta.
+
+**Estrategias comparadas**
+
+| Estrategia | Como decide |
+|---|---|
+| regras | alerta com severidade >= limiar |
+| juiz LLM | o modelo decide sozinho, sem ver as regras |
+| hibrido | regra CRITICAL decide direto; o resto vai ao juiz, com os alertas como dica |
+
+**Decisoes de projeto do juiz**
+
+- O conteudo do evento e tratado como **dado nao confiavel** (o agente pode tentar manipular o juiz). O prompt avisa isso, o evento vai delimitado por tags e o texto `</` e neutralizado.
+- Respostas validas ficam em **cache** (`data/judge_cache.jsonl`), entao reavaliar nao paga duas vezes.
+- Falha de API ou resposta invalida vira `error`, contado como suspeito (**fail-closed**) e reportado a parte.
+- O juiz **nao roda dentro do hook** (latencia e custo): ele analisa eventos offline.
+- Modelo padrao: `claude-haiku-5-5`. Troque com `AGENTWATCH_JUDGE_MODEL`.
+
+**Rodar**
+
+```bash
+python -m agentwatch.evaluate                       # so regras, sem API
+pip install -r requirements-judge.txt
+export ANTHROPIC_API_KEY=...                        # nunca commite a chave
+python -m agentwatch.evaluate --judge --report reports/avaliacao.md
+```
+
+> **Privacidade:** com `--judge`, comandos e caminhos sao enviados a API da Anthropic. A limpeza de segredos e por padroes e nao e perfeita; nao use eventos reais sensiveis.
+
+**Metricas:** precisao, recall, F1 e taxa de falsos positivos, com intervalo de Wilson 95%. Inclui varredura de limiar das regras (precisao x recall).
+
+**Conjunto rotulado** (`data/labeled_events.jsonl`): 69 eventos sinteticos (34 suspeitos, 35 seguros), em dois grupos: `comum` e `dificil` (ofuscacao, ferramentas fora do escopo das regras, casos dependentes de contexto).
+
+### Resultado atual: somente regras (limiar MEDIUM)
+
+| Precisao | Recall | Falso positivo |
+|---|---|---|
+| 0.73 [0.54-0.86] | 0.56 [0.39-0.71] | 0.20 [0.10-0.36] |
+
+Relatorio completo em `reports/rules_baseline.md`. **O juiz ainda nao foi medido**: falta rodar `--judge` com uma chave de API.
+
+### Cuidados ao interpretar
+
+- O conjunto e **sintetico e rotulado pelo mesmo autor das regras**, entao ha vies.
+- O grupo `dificil` foi escrito conhecendo os limites das regras: o recall baixo ali e esperado por construcao. A pergunta util e se o juiz recupera esses casos sem inflar os falsos positivos.
+- No grupo `comum`, as regras acertam tudo porque usam os mesmos padroes de seus testes; isso nao prova generalizacao.
+- Varios rotulos dependem de contexto (ex.: `git push -f` em branch pessoal).
+- Antes de concluir algo, repita com eventos reais anonimizados.
+
 ## Ver eventos e alertas
 
 ```bash
@@ -89,8 +140,12 @@ agentwatch/
   hook.py      # parsing, redacao e gravacao
   monitors.py  # regras de deteccao (evento -> alertas)
   scan.py      # reanalisa eventos antigos com as regras atuais
+  judge.py     # juiz LLM (prompt, cache, parsing, modo hibrido)
+  evaluate.py  # metricas e relatorio: regras vs. juiz
   show.py      # leitura rapida de eventos e alertas
 log_event.py   # ponto de entrada do hook
+data/          # conjunto rotulado (e cache do juiz, ignorado pelo git)
+reports/       # relatorios de avaliacao
 tests/         # pytest
 examples/      # configuracao e evento de exemplo
 ```
@@ -99,6 +154,6 @@ examples/      # configuracao e evento de exemplo
 
 - [x] Fase 1: captura e armazenamento
 - [x] Fase 2: monitores por regra com testes
-- [ ] Fase 3: LLM-as-judge e avaliacao (precisao e recall)
+- [x] Fase 3: juiz LLM e avaliacao (codigo e testes prontos; **falta medir o juiz com chave de API**)
 - [ ] Fase 4: API FastAPI e painel Streamlit
 - [ ] Fase 5: Docker, GitHub Actions e deploy no Azure
